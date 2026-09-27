@@ -1,0 +1,90 @@
+{
+  "name": "POC - Travel Booking Mail Router",
+  "type": "Microsoft.Flow/flows",
+  "properties": {
+    "displayName": "POC - Travel Booking Mail Router",
+    "definition": {
+      "triggers": {
+        "When_a_new_email_arrives_(V3)": {
+          "type": "OpenApiConnectionNotification",
+          "inputs": {
+            "parameters": {
+              "includeAttachments": true,
+              "importance": "Any",
+              "fetchOnlyWithAttachment": false,
+              "folderPath": "Inbox"
+            }
+          }
+        }
+      },
+      "actions": {
+        "Convert_time_zone": {
+          "type": "Expression",
+          "kind": "ConvertTimeZone",
+          "inputs": {
+            "baseTime": "@triggerOutputs()?['body/receivedDateTime']",
+            "sourceTimeZone": "UTC",
+            "destinationTimeZone": "SE Asia Standard Time",
+            "formatString": "s"
+          }
+        },
+        "Exclusion_Filter": {
+          "type": "If",
+          "description": "Excludes system-generated emails and non-operational addresses",
+          "expression": {
+            "and": [
+              { "not": { "equals": ["@triggerOutputs()?['body/from']", "no-reply@company.com"] } },
+              { "not": { "equals": ["@triggerOutputs()?['body/from']", "hr@company.com"] } },
+              { "not": { "contains": ["@triggerOutputs()?['body/from']", "postmaster"] } }
+            ]
+          },
+          "actions": {
+            "Target_Check": {
+              "type": "If",
+              "actions": {
+                "Time_Routing": {
+                  "type": "If",
+                  "actions": {
+                    "Working_Hours_Routing": {
+                      "type": "If",
+                      "expression": {
+                        "equals": [
+                          "@and(greaterOrEquals(outputs('CurrentHour'),8), less(outputs('CurrentHour'),17))",
+                          true
+                        ]
+                      },
+                      "actions": {
+                        "Route_To_Standard_Support": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "messageId": "@triggerOutputs()?['body/id']",
+                              "replyParameters/To": "primary-support@vendor.com"
+                            }
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Route_To_After_Hours_Support": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "messageId": "@triggerOutputs()?['body/id']",
+                                "replyParameters/To": "primary-support@vendor.com; afterhours@vendor.com"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
